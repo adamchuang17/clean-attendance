@@ -3,8 +3,8 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>清潔人員簽到簽退（v5）</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>清潔人員簽到簽退（v5x 自帶QR）</title>
   <style>
     body { font-family: "Noto Sans TC", Arial, sans-serif; padding: 16px; background: #f6f7fb; }
     h1 { font-size: 20px; }
@@ -12,20 +12,21 @@
     .btn { background: #e9eefc; border: 1px solid #ccc; margin: 4px; cursor: pointer; }
     .btn:active { transform: translateY(1px); }
     .status { padding: 4px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; }
-    .online { background: #d4edda; color: #155724; }
-    .offline { background: #fff3cd; color: #856404; }
-    .log { background: #fff; border: 1px solid #eee; padding: 10px; margin-top: 10px; font-size: 14px; white-space: pre-line; max-height: 240px; overflow-y: auto; }
+    .online { background: #d4edda; color: #155724; } .offline{ background: #fff3cd; color:#856404; }
+    .log { background:#fff; border:1px solid #eee; padding:10px; margin-top:10px; font-size:14px; white-space:pre-line; max-height:240px; overflow-y:auto; }
+    .qr-block { margin-top:20px; padding:12px; background:#fff; border:1px solid #ddd; border-radius:8px; }
+    .qr-block img { width:180px; margin:10px; }
   </style>
 </head>
 <body>
   <h1>清潔人員簽到簽退 <span id="net" class="status offline">離線</span></h1>
-  <label>人員</label>
+  <label>人員</label><br/>
   <select id="staff">
     <option value="C004">陳雀惠</option>
     <option value="C005">陳清淇</option>
   </select><br/>
-  <label>地點（可選）</label>
-  <input id="site" type="text" placeholder="如：D區大廳"><br/>
+  <label>地點（可選）</label><br/>
+  <input id="site" placeholder="如：D區大廳"><br/>
   <div>
     <button class="btn" onclick="mark('AM_IN')">早上簽到</button>
     <button class="btn" onclick="mark('AM_OUT')">早上簽退</button>
@@ -37,15 +38,25 @@
   <button class="btn" onclick="exportCsv()">匯出CSV</button>
   <button class="btn" onclick="syncQueue()">立即同步</button>
   <div>
-    <label>Webhook URL</label>
+    <label>Webhook URL</label><br/>
     <input id="webhook" type="url" placeholder="https://script.google.com/macros/s/.../exec">
   </div>
   <div class="log" id="log"></div>
+
+  <div class="qr-block">
+    <h3>清潔人員 QR Code</h3>
+    <div>
+      <div><b>陳雀惠</b></div>
+      <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAeoAAAHqAQAAAADjFjCXAAAET0lEQVR4nO2cXYrrOBBGT40NebShF5ClKDuYJQ29pLsDeyl3AQ3yY8Cm5kE/VnLnKTb0NPnqIXEsHxRD8UlVJcmcAzb/dYQG4cKFCxcuXLhw4efilq0nfdzYjNn6/NBsff5gKY/ezutd+Jviwd3dI8CwAksPIW7JE/MjcTOgc3d3f8QP9i78TfGlyFeIAIO73Ya1+lprjSf+T/688B+G90+/fbZu9dnAWT7cGNbeQvzAACz8OrV34e+JP3udwWYe4sdqDHfzeYzOfF2B4at3llN7F/6eePG6wYElKdwK5Dkc4beVUXe5uIVf0OaVf/S7C/9mfDYzsxHsBtgtOVyfr3JwAcCWQthTexf+ZnjSul2+fL6uMF/vBmzmLJv5PHbAcLesiaf1Lvw9cVIeJPiaf4fYOdC5T4M7IcKeUtnvpVzL9KPfXfh34dnrUpZuKFchdsXhfIXgKz7x8NPldcJftqx1EXxKCrfWK3f35GFrSSR79kl5nfDXrczrlm6FIUKKXH2zMoHrHJYRZgPCBD5f76X1R7+78O/Cy1C5z9di50XX8oSvUbgJWumT1gl/yZqqag0p3FNIsY+/OcJonpPXCT+IJ/liuSSZMxtJfpVaP0eA4W5J6z7touq/8AOWaxPz318pVefzGGvj1jvLx2ohjuYsFzeGr55cuTihd+HvibeZk7zcJF/t4WuKZqeUV/HWNMIKP4IvPanIH2LneUhdeuyWmjejKly5d2Lvwt8Lb6KJNGmbyrrNPNejzvqGnCrOciitE/6yFa/rnofZ5GEpIxxpSmVNckVeJ/wla3Ij/+lX1BxK8r+uFCjkdcJftj00aGpe7L7ma6r+54/SqmhC+FE8b4VYekguFUlX+d6wwnz1qnrn9i783fCidbHu/dpXn8BjMawWKGr6RFon/HXcbmxmt6XHp6WoXvAVuyWtu5v943cjxM18UpZY+DFrsyTD2uaGa0Mz4OYFAiiaEH4YT4XXlCq2i5dpnpnZ2LndAHe/W3LMz6t2YQs/ZHmCVuZrJWmyLxle2fMlbSJFWif8ZSvRRC5L7IvsmpRKcseHsqxGWOEHrKlNhJqqC3tGOMLzvh2tYBd+DH9Y1Rnrgs60H6zoWn6urD5xVcSEH7Pd63waHrYn1ni17NvZBU9eJ/yI1RMnIqUO8dUnrZtHcBaw8NtywzyCQYd26wg/YP5o5BleSdVNlBLsVBpUmxB+itaVUkPenugsI0DnFuKYzg+z4JuRz945q3fh74nXEydqlFC2h+WKbFkMkMNXr8vdpXXCj+L1rE6gLBleLsnDzMYuH2I3p+OcOtUmhB+xPTZtZQ7qHp2cQylZuv3EE2md8FftyeuyzPHHkFryxXlw1Qgr/HV7PquzHAT7sRrDmq4ccAuTA3Rus3UlpPjR7y78u/C2NvGUNMkLOmFfAlUqssqcCD9if5zVmb/3g0283u/86eHv/vPChQsXLly4cOHCq/0LBkIIYG2RFbAAAAAASUVORK5CYII=" alt="陳雀惠 QR">
+    </div>
+    <div>
+      <div><b>陳清淇</b></div>
+      <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAeoAAAHqAQAAAADjFjCXAAAEKklEQVR4nO2dTY6kOBBGXwxIuTRSHSCPAjfoI436ZnCUOkBLsCzJKGZhBzbZvQJaWTkZsUgV4CdA+hQ4fuwS5YRN/5yhwXHHHXfccccdd9zxa3HJ1sIkLSLdKkzS5kGTXYDFhg7X3d3xd8NRVVV6VVWdG6WfG6XXiOrcqI40ms2uVsT40u/u+LNwU90MSXAETT8mrqy/LLi5UaBx1Tl+Na4jq8CSv7AyAEzdat/Vv3t3x98O13Fpk9eTIXwJUwf6swN6jX/97o6/B24BQ1BgAXpdRVk6FBoFUOkVlOVDBaDOK7/0uzv+ZHwSEZEOZFhuKgONyrC0yLC0wNIiQxq5phD20rs7/mZ48nWV+5ruEWA1XbGKQgRCRPee7tkP7/hL4zIAKXzoZwAaZbp/CYSYPGGa3OXMnfs6x09ZypCMIWJJk5hzKP0MqhpTIKEju0P1zInjh+0xLUdQ1bHK16mqzpA02ZdzrjrHD1uWD5vgKC4tC678pFTxGOyqq87xQ/bo0vY1L/uaRhMcO0266hw/YjlfN3W/2pS0m7oGIczoJE0EGhXCrDJ1iAJIhb/0uzv+LLyKJmpfN0PVApD6AEIZZx0B7uscP2SV6jZd2YVS+GeLNXI0619Yx09YmsOVwypUKH9t7U7u6xy/AK9UZ0ED2ZsB+6DVqv8lfeKqc/yQVaobqRMpSYR5iFXERiAnkl11jp/Ee1WVIagCq+QmJ7mlQIKpoy6VWTPKZXd3/M3w3Rd2xhqKzdfpGEqn8T7gdV/n+GGz4pbN3PL0ranmenWBwq666hw/i5flYQBVMUKG5WZf06Cp8a5M+L7Hwzv+crj5urJQZ6vIZg+3rRuzfF3pA3Bf5/gJXAZWof9sq4U6MoSYLxC+8s82JEez3+HhHX85fEuVYJHDH3rpqnrFDJ45cfyaGLYvXSVhvzx2y5Kk3PBc4g9XneMHzdZNLB/KdI9I/9lGCLGF8CWa1k0sHxFYW526JtYLxV763R1/Fr7vObHV/b3mDQDqRMquLOtfWMdPWP7CbuXWbd3EruZvU79tsKvO8RNWahPW0GRxBdb9ZOOsGUpddY6fsxJNFJeWBKfW32mtTbHWpKvO8cNmO07QqEAbpT5sgBBbAUSnH3PacSIHHFfc3fH3xOs8yMOkTUvmboYSQ5R9xtzXOX7MqnkdNFtDiYUUapsoVsuzvfrv+Dn8ca/OUn3Q0suZzgHm67zTyfEr8MW2Gp7uOaQQkVvyayKd5VXyFieNpsHf5OEdfzG8/e3MIqQi//TjlwBrqyxdKvzTj2ur6dwVd3fc8WRW6Zd/P29K/3lTGYL1cv5MO7R7B7vjZ+y3vToBlKWJMt2/RFlIu3ZKbq2bEZY2Sj9ecHfH3xN/jGFtxX9eGWubrtvhuNXLPJpw/LCJ//c6xx133HHHHXfc8f8F/h9YK0azybsVwgAAAABJRU5ErkJggg==" alt="陳清淇 QR">
+    </div>
+  </div>
+
 <script>
-const STAFF = [
-  { id: "C004", name: "陳雀惠" },
-  { id: "C005", name: "陳清淇" }
-];
+const STAFF=[{id:"C004",name:"陳雀惠"},{id:"C005",name:"陳清淇"}];
 const STORAGE_KEY="records_v5",QUEUE_KEY="queue_v5",CONFIG_KEY="cfg_v5";
 function qs(name){const p=new URLSearchParams(location.search);return p.get(name);}
 function nowISO(){return new Date().toISOString();}
@@ -56,12 +67,12 @@ function loadList(k){try{return JSON.parse(localStorage.getItem(k))||[];}catch{r
 function saveList(k,v){localStorage.setItem(k,JSON.stringify(v));}
 function addRecord(r){let list=loadList(STORAGE_KEY);list.unshift(r);saveList(STORAGE_KEY,list);render();}
 function queuePush(r){let q=loadList(QUEUE_KEY);q.push(r);saveList(QUEUE_KEY,q);}
-function render(){let list=loadList(STORAGE_KEY);document.getElementById("log").textContent=list.map(r=>`${r.staff_name} - ${r.action} - ${r.ts_local}${r.uploaded?" ✓":""}`).join("\\n");}
-function toCSV(rows){const h=["id","staff_id","staff_name","action","ts_iso","ts_local","tz","site","device","uploaded"];let csv=h.join(",")+"\\n";rows.forEach(r=>{csv+=h.map(x=>r[x]||"").join(",")+"\\n"});return csv;}
+function render(){let list=loadList(STORAGE_KEY);document.getElementById("log").textContent=list.map(r=>`${r.staff_name} - ${r.action} - ${r.ts_local}${r.uploaded?" ✓":""}`).join("\n");}
+function toCSV(rows){const h=["id","staff_id","staff_name","action","ts_iso","ts_local","tz","site","device","uploaded"];let csv=h.join(",")+"\n";rows.forEach(r=>{csv+=h.map(x=>r[x]||"").join(",")+"\n"});return csv;}
 function exportCsv(){const list=loadList(STORAGE_KEY);const csv=toCSV(list.reverse());const blob=new Blob([csv],{type:"text/csv"});const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download="attendance.csv";a.click();URL.revokeObjectURL(url);}
-async function syncQueue(){setNet();if(!navigator.onLine)return;const cfg=JSON.parse(localStorage.getItem(CONFIG_KEY)||"{}");if(!cfg.webhook)return;let q=loadList(QUEUE_KEY);for(let i=0;i<q.length;i++){let r=q[i];try{let res=await fetch(cfg.webhook,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(r)});if(res.ok){r.uploaded=true;r.uploaded_at=nowISO();let list=loadList(STORAGE_KEY);let idx=list.findIndex(x=>x.id===r.id);if(idx>=0){list[idx]=r;saveList(STORAGE_KEY,list);}q=q.filter(x=>x.id!==r.id);saveList(QUEUE_KEY,q);}}catch(e){break;}}render();}
-function mark(action){const sid=document.getElementById("staff").value;const sname=STAFF.find(s=>s.id===sid).name;const site=document.getElementById("site").value;const ts=nowISO();let rec={id:sid+"|"+action+"|"+ts,staff_id:sid,staff_name:sname,action,ts_iso:ts,ts_local:fmtLocal(ts),tz:tzName(),site,device:deviceId(),uploaded:false};addRecord(rec);queuePush(rec);syncQueue();}
-function init(){const sid=qs("staff");if(sid){document.getElementById("staff").value=sid;}const act=qs("act");if(sid&&act){mark(act);}const cfg=JSON.parse(localStorage.getItem(CONFIG_KEY)||"{}");if(cfg.webhook)document.getElementById("webhook").value=cfg.webhook;document.getElementById("webhook").addEventListener("change",e=>{let c=JSON.parse(localStorage.getItem(CONFIG_KEY)||"{}");c.webhook=e.target.value;localStorage.setItem(CONFIG_KEY,JSON.stringify(c));});render();setNet();window.addEventListener("online",syncQueue);window.addEventListener("offline",setNet);}
+async function syncQueue(){setNet();if(!navigator.onLine)return;const cfg=JSON.parse(localStorage.getItem(CONFIG_KEY)||"{}");if(!cfg.webhook)return;let q=loadList(QUEUE_KEY);for(let i=0;i<q.length;i++){let r=q[i];try{let res=await fetch(cfg.webhook,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(r)});if(res.ok){r.uploaded=true;r.uploaded_at=nowISO();let list=loadList(STORAGE_KEY);let idx=list.findIndex(x=>x.id===r.id);if(idx>=0){list[idx]=r;saveList(STORAGE_KEY,list);}q=q.filter(x=>x.id!==r.id);saveList(QUEUE_KEY,q);render();}else{}}catch(e){break;}}}
+function mark(action){const sid=document.getElementById("staff").value;const sname=STAFF.find(s=>s.id===sid).name;const site=document.getElementById("site").value;const ts=nowISO();let rec={id:sid+"|"+action+"|"+ts,staff_id:sid,staff_name:sname,action,ts_iso:ts,ts_local:fmtLocal(ts),tz:tzName(),site,device:deviceId(),uploaded:false};addRecord(rec);queuePush(rec);syncQueue();if(navigator.vibrate)navigator.vibrate(20);}
+function init(){const sid=qs("staff");if(sid){document.getElementById("staff").value=sid;}const act=qs("act");if(sid&&act){mark(act);}const cfg=JSON.parse(localStorage.getItem(CONFIG_KEY)||"{}");if(cfg.webhook)document.getElementById("webhook").value=cfg.webhook;document.getElementById("webhook").addEventListener("change",e=>{let c=JSON.parse(localStorage.getItem(CONFIG_KEY)||"{}");c.webhook=e.target.value;localStorage.setItem(CONFIG_KEY,JSON.stringify(c));});render();setNet();window.addEventListener("online",setNet);window.addEventListener("offline",setNet);}
 function setNet(){const el=document.getElementById("net");if(navigator.onLine){el.textContent="在線";el.className="status online";}else{el.textContent="離線";el.className="status offline";}}
 init();
 </script>
