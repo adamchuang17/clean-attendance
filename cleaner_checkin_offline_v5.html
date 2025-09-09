@@ -1,0 +1,69 @@
+
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>清潔人員簽到簽退（v5）</title>
+  <style>
+    body { font-family: "Noto Sans TC", Arial, sans-serif; padding: 16px; background: #f6f7fb; }
+    h1 { font-size: 20px; }
+    select, button, input { margin: 6px 0; padding: 10px; font-size: 16px; border-radius: 8px; }
+    .btn { background: #e9eefc; border: 1px solid #ccc; margin: 4px; cursor: pointer; }
+    .btn:active { transform: translateY(1px); }
+    .status { padding: 4px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; }
+    .online { background: #d4edda; color: #155724; }
+    .offline { background: #fff3cd; color: #856404; }
+    .log { background: #fff; border: 1px solid #eee; padding: 10px; margin-top: 10px; font-size: 14px; white-space: pre-line; max-height: 240px; overflow-y: auto; }
+  </style>
+</head>
+<body>
+  <h1>清潔人員簽到簽退 <span id="net" class="status offline">離線</span></h1>
+  <label>人員</label>
+  <select id="staff">
+    <option value="C004">陳雀惠</option>
+    <option value="C005">陳清淇</option>
+  </select><br/>
+  <label>地點（可選）</label>
+  <input id="site" type="text" placeholder="如：D區大廳"><br/>
+  <div>
+    <button class="btn" onclick="mark('AM_IN')">早上簽到</button>
+    <button class="btn" onclick="mark('AM_OUT')">早上簽退</button>
+    <button class="btn" onclick="mark('PM_IN')">下午簽到</button>
+    <button class="btn" onclick="mark('PM_OUT')">下午簽退</button>
+    <button class="btn" onclick="mark('OT_IN')">加班簽到</button>
+    <button class="btn" onclick="mark('OT_OUT')">加班簽退</button>
+  </div>
+  <button class="btn" onclick="exportCsv()">匯出CSV</button>
+  <button class="btn" onclick="syncQueue()">立即同步</button>
+  <div>
+    <label>Webhook URL</label>
+    <input id="webhook" type="url" placeholder="https://script.google.com/macros/s/.../exec">
+  </div>
+  <div class="log" id="log"></div>
+<script>
+const STAFF = [
+  { id: "C004", name: "陳雀惠" },
+  { id: "C005", name: "陳清淇" }
+];
+const STORAGE_KEY="records_v5",QUEUE_KEY="queue_v5",CONFIG_KEY="cfg_v5";
+function qs(name){const p=new URLSearchParams(location.search);return p.get(name);}
+function nowISO(){return new Date().toISOString();}
+function fmtLocal(ts){return new Date(ts).toLocaleString("zh-TW",{timeZone:"Asia/Taipei",hour12:false});}
+function tzName(){try{return Intl.DateTimeFormat().resolvedOptions().timeZone||"Asia/Taipei";}catch{return"Asia/Taipei";}}
+function deviceId(){const k="dev_id";let id=localStorage.getItem(k);if(!id){id="dev-"+Math.random().toString(36).slice(2,9);localStorage.setItem(k,id);}return id;}
+function loadList(k){try{return JSON.parse(localStorage.getItem(k))||[];}catch{return[];}}
+function saveList(k,v){localStorage.setItem(k,JSON.stringify(v));}
+function addRecord(r){let list=loadList(STORAGE_KEY);list.unshift(r);saveList(STORAGE_KEY,list);render();}
+function queuePush(r){let q=loadList(QUEUE_KEY);q.push(r);saveList(QUEUE_KEY,q);}
+function render(){let list=loadList(STORAGE_KEY);document.getElementById("log").textContent=list.map(r=>`${r.staff_name} - ${r.action} - ${r.ts_local}${r.uploaded?" ✓":""}`).join("\\n");}
+function toCSV(rows){const h=["id","staff_id","staff_name","action","ts_iso","ts_local","tz","site","device","uploaded"];let csv=h.join(",")+"\\n";rows.forEach(r=>{csv+=h.map(x=>r[x]||"").join(",")+"\\n"});return csv;}
+function exportCsv(){const list=loadList(STORAGE_KEY);const csv=toCSV(list.reverse());const blob=new Blob([csv],{type:"text/csv"});const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download="attendance.csv";a.click();URL.revokeObjectURL(url);}
+async function syncQueue(){setNet();if(!navigator.onLine)return;const cfg=JSON.parse(localStorage.getItem(CONFIG_KEY)||"{}");if(!cfg.webhook)return;let q=loadList(QUEUE_KEY);for(let i=0;i<q.length;i++){let r=q[i];try{let res=await fetch(cfg.webhook,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(r)});if(res.ok){r.uploaded=true;r.uploaded_at=nowISO();let list=loadList(STORAGE_KEY);let idx=list.findIndex(x=>x.id===r.id);if(idx>=0){list[idx]=r;saveList(STORAGE_KEY,list);}q=q.filter(x=>x.id!==r.id);saveList(QUEUE_KEY,q);}}catch(e){break;}}render();}
+function mark(action){const sid=document.getElementById("staff").value;const sname=STAFF.find(s=>s.id===sid).name;const site=document.getElementById("site").value;const ts=nowISO();let rec={id:sid+"|"+action+"|"+ts,staff_id:sid,staff_name:sname,action,ts_iso:ts,ts_local:fmtLocal(ts),tz:tzName(),site,device:deviceId(),uploaded:false};addRecord(rec);queuePush(rec);syncQueue();}
+function init(){const sid=qs("staff");if(sid){document.getElementById("staff").value=sid;}const act=qs("act");if(sid&&act){mark(act);}const cfg=JSON.parse(localStorage.getItem(CONFIG_KEY)||"{}");if(cfg.webhook)document.getElementById("webhook").value=cfg.webhook;document.getElementById("webhook").addEventListener("change",e=>{let c=JSON.parse(localStorage.getItem(CONFIG_KEY)||"{}");c.webhook=e.target.value;localStorage.setItem(CONFIG_KEY,JSON.stringify(c));});render();setNet();window.addEventListener("online",syncQueue);window.addEventListener("offline",setNet);}
+function setNet(){const el=document.getElementById("net");if(navigator.onLine){el.textContent="在線";el.className="status online";}else{el.textContent="離線";el.className="status offline";}}
+init();
+</script>
+</body>
+</html>
