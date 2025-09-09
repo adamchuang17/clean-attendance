@@ -1,10 +1,9 @@
-
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>清潔人員簽到簽退（v5 必須掃描）</title>
+<title>清潔人員簽到簽退（v5 雙通道參數）</title>
 <style>
   body { font-family: "Noto Sans TC", Arial, sans-serif; padding: 16px; background: #f6f7fb; }
   h1 { font-size: 20px; }
@@ -15,13 +14,18 @@
   .status { padding: 4px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; }
   .online { background: #d4edda; color: #155724; } .offline{ background: #fff3cd; color: #856404; }
   .banner { background:#fff3cd; color:#7a5d00; border:1px solid #ffe08a; padding:10px; border-radius:8px; margin:10px 0; }
+  .ok { background:#e9f7ef; color:#17663a; border:1px solid #bde5c8; }
   .log { background: #fff; border: 1px solid #eee; padding: 10px; margin-top: 10px; font-size: 14px; white-space: pre-line; max-height: 240px; overflow-y: auto; }
+  .debug { font-size:12px; color:#6b7280; }
 </style>
 </head>
 <body>
   <h1>清潔人員簽到簽退 <span id="net" class="status offline">離線</span></h1>
 
-  <div id="scanBanner" class="banner" style="display:none">此頁面必須透過「<b>掃描人員專屬 QR Code</b>」開啟，才可簽到/簽退。</div>
+  <div id="scanBanner" class="banner" style="display:none">此頁面必須透過「<b>掃描人員專屬連結</b>」開啟才可簽到。支援參數：<code>?staff=</code> 或 <code>#staff=</code> 或 <code>#C004</code>。</div>
+  <div id="okBanner" class="banner ok" style="display:none">已驗證人員：<b id="who"></b>，可以簽到。</div>
+
+  <div class="debug" id="dbg"></div>
 
   <label>人員</label><br/>
   <select id="staff" disabled>
@@ -53,7 +57,7 @@
 const STAFF=[{id:"C004",name:"陳雀惠"},{id:"C005",name:"陳清淇"}];
 const STORAGE_KEY="records_v5",QUEUE_KEY="queue_v5",CONFIG_KEY="cfg_v5";
 const $=s=>document.querySelector(s); const $$=s=>Array.from(document.querySelectorAll(s));
-function qs(n){const p=new URLSearchParams(location.search);return p.get(n);}
+
 function nowISO(){return new Date().toISOString();}
 function fmtLocal(ts){return new Date(ts).toLocaleString("zh-TW",{timeZone:"Asia/Taipei",hour12:false});}
 function tzName(){try{return Intl.DateTimeFormat().resolvedOptions().timeZone||"Asia/Taipei";}catch{return"Asia/Taipei";}}
@@ -83,13 +87,13 @@ async function syncQueue(){
         if(idx>=0){ list[idx]=r; saveList(STORAGE_KEY,list); }
         q=q.filter(x=>x.id!==r.id); saveList(QUEUE_KEY,q);
         render();
-      }catch(_){ break; }
-    }
+      } else { /* keep */ }
+    }catch(_){ break; }
   }
 }
 
 function mark(action){
-  if ($(".act[disabled]")) { alert("請先掃描人員 QR Code 再簽到。"); return; }
+  if ($(".act[disabled]")) { alert("請先用 QR 開啟本頁（帶有 staff 參數）再簽到。"); return; }
   const sid=$("#staff").value;
   const sname=STAFF.find(s=>s.id===sid)?.name||sid;
   const site=$("#site").value.trim();
@@ -98,17 +102,33 @@ function mark(action){
   addRecord(rec); queuePush(rec); syncQueue(); if(navigator.vibrate) navigator.vibrate(20);
 }
 
-function unlockByQR(){
-  // 只有在 URL 有 staff 參數時，才解鎖所有操作
-  const sid=qs("staff");
-  if (sid && ["C004","C005"].includes(sid)) {
+function parseStaffFromURL(){
+  const url = new URL(location.href);
+  // 1) 查 query (?staff= 或 ?s=)
+  let sid = url.searchParams.get("staff") || url.searchParams.get("s");
+  // 2) 查 hash (#staff=C004 或 #C004)
+  if (!sid && location.hash){
+    const h = location.hash.replace(/^#/, "");
+    if (h.startsWith("staff=")) sid = h.split("=")[1];
+    else if (/^C00[45]$/i.test(h)) sid = h.toUpperCase();
+  }
+  return sid;
+}
+
+function unlockIfStaff(){
+  const sid = parseStaffFromURL();
+  $("#dbg").textContent = "URL: " + location.href + "\n解析到 staff: " + (sid || "(無)");
+  if (sid && ["C004","C005"].includes(sid)){
     $("#staff").value=sid;
     $("#staff").disabled=false; $("#site").disabled=false;
     $$(".act").forEach(b=>b.disabled=false);
     $("#scanBanner").style.display="none";
+    $("#okBanner").style.display="";
+    $("#who").textContent = (sid==="C004"?"陳雀惠":"陳清淇");
     return true;
   } else {
     $("#scanBanner").style.display="";
+    $("#okBanner").style.display="none";
     return false;
   }
 }
@@ -131,9 +151,16 @@ function init(){
   $("#exportCsv").addEventListener("click", exportCsv);
   $("#syncNow").addEventListener("click", syncQueue);
 
-  const unlocked = unlockByQR();
-  const act=qs("act");
-  if (unlocked && act) { mark(act); }
+  const unlocked = unlockIfStaff();
+  // 若 hash 改變（某些 App 掃描只給 hash），也重新判斷
+  window.addEventListener("hashchange", unlockIfStaff);
+
+  // 如同時帶 act 參數（query/hash 皆可），自動執行
+  const url = new URL(location.href);
+  const actQ = url.searchParams.get("act");
+  const actH = (location.hash.match(/act=(AM_IN|AM_OUT|PM_IN|PM_OUT|OT_IN|OT_OUT)/)||[])[1];
+  const act = actQ || actH;
+  if (unlocked && act) mark(act);
 
   render();
 }
