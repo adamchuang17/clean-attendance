@@ -1,170 +1,213 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>清潔人員簽到簽退（v5 雙通道參數）</title>
-<style>
-  body { font-family: "Noto Sans TC", Arial, sans-serif; padding: 16px; background: #f6f7fb; }
-  h1 { font-size: 20px; }
-  select, button, input { margin: 6px 0; padding: 10px; font-size: 16px; border-radius: 8px; }
-  .btn { background: #e9eefc; border: 1px solid #ccc; margin: 4px; cursor: pointer; }
-  .btn:active { transform: translateY(1px); }
-  .btn[disabled] { opacity: .5; cursor: not-allowed; }
-  .status { padding: 4px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; }
-  .online { background: #d4edda; color: #155724; } .offline{ background: #fff3cd; color: #856404; }
-  .banner { background:#fff3cd; color:#7a5d00; border:1px solid #ffe08a; padding:10px; border-radius:8px; margin:10px 0; }
-  .ok { background:#e9f7ef; color:#17663a; border:1px solid #bde5c8; }
-  .log { background: #fff; border: 1px solid #eee; padding: 10px; margin-top: 10px; font-size: 14px; white-space: pre-line; max-height: 240px; overflow-y: auto; }
-  .debug { font-size:12px; color:#6b7280; }
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>清潔人員簽到簽退（v5）</title>
+  <style>
+    body { font-family: "Noto Sans TC", Arial, sans-serif; padding: 16px; background: #f6f7fb; }
+    h1 { font-size: 20px; }
+    select, button, input { margin: 6px 0; padding: 10px; font-size: 16px; border-radius: 8px; }
+    .btn { background: #e9eefc; border: 1px solid #ccc; margin: 4px; cursor: pointer; }
+    .btn:active { transform: translateY(1px); }
+    .status { padding: 4px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; }
+    .online { background: #d4edda; color: #155724; }
+    .offline { background: #fff3cd; color: #856404; }
+    .log { background: #fff; border: 1px solid #eee; padding: 10px; margin-top: 10px; font-size: 14px; white-space: pre-line; max-height: 240px; overflow-y: auto; }
+    .muted { color:#6b7280; font-size:12px; }
+  </style>
 </head>
 <body>
   <h1>清潔人員簽到簽退 <span id="net" class="status offline">離線</span></h1>
 
-  <div id="scanBanner" class="banner" style="display:none">此頁面必須透過「<b>掃描人員專屬連結</b>」開啟才可簽到。支援參數：<code>?staff=</code> 或 <code>#staff=</code> 或 <code>#C004</code>。</div>
-  <div id="okBanner" class="banner ok" style="display:none">已驗證人員：<b id="who"></b>，可以簽到。</div>
-
-  <div class="debug" id="dbg"></div>
-
   <label>人員</label><br/>
-  <select id="staff" disabled>
+  <select id="staff">
     <option value="C004">陳雀惠</option>
     <option value="C005">陳清淇</option>
   </select><br/>
+
   <label>地點（可選）</label><br/>
-  <input id="site" placeholder="如：D區大廳" disabled><br/>
+  <input id="site" type="text" placeholder="如：D區大廳 / 地下室"><br/>
 
   <div>
-    <button class="btn act" data-act="AM_IN" disabled>早上簽到</button>
-    <button class="btn act" data-act="AM_OUT" disabled>早上簽退</button>
-    <button class="btn act" data-act="PM_IN" disabled>下午簽到</button>
-    <button class="btn act" data-act="PM_OUT" disabled>下午簽退</button>
-    <button class="btn act" data-act="OT_IN" disabled>加班簽到</button>
-    <button class="btn act" data-act="OT_OUT" disabled>加班簽退</button>
+    <button class="btn" onclick="mark('AM_IN')">早上簽到</button>
+    <button class="btn" onclick="mark('AM_OUT')">早上簽退</button>
+    <button class="btn" onclick="mark('PM_IN')">下午簽到</button>
+    <button class="btn" onclick="mark('PM_OUT')">下午簽退</button>
+    <button class="btn" onclick="mark('OT_IN')">加班簽到</button>
+    <button class="btn" onclick="mark('OT_OUT')">加班簽退</button>
   </div>
 
-  <button class="btn" id="exportCsv">匯出CSV</button>
-  <button class="btn" id="syncNow">立即同步</button>
-  <div>
+  <div style="margin-top:8px">
+    <button class="btn" onclick="exportCsv()">匯出CSV</button>
+    <button class="btn" onclick="syncQueue()">立即同步</button>
+  </div>
+
+  <div style="margin-top:8px">
     <label>Webhook URL</label><br/>
-    <input id="webhook" type="url" placeholder="https://script.google.com/macros/s/.../exec">
+    <input id="webhook" type="url" placeholder="https://script.google.com/macros/s/.../exec" style="width:100%">
+    <div class="muted">上傳格式 JSON：{ id, staff_id, staff_name, action, ts_iso, ts_local, tz, site, device, uploaded }</div>
   </div>
 
   <div class="log" id="log"></div>
 
 <script>
-const STAFF=[{id:"C004",name:"陳雀惠"},{id:"C005",name:"陳清淇"}];
-const STORAGE_KEY="records_v5",QUEUE_KEY="queue_v5",CONFIG_KEY="cfg_v5";
-const $=s=>document.querySelector(s); const $$=s=>Array.from(document.querySelectorAll(s));
+/* ===== 基本設定 ===== */
+const STAFF = [
+  { id: "C004", name: "陳雀惠" },
+  { id: "C005", name: "陳清淇" },
+];
+const STORAGE_KEY = "records_v5";
+const QUEUE_KEY   = "queue_v5";
+const CONFIG_KEY  = "cfg_v5";
 
-function nowISO(){return new Date().toISOString();}
-function fmtLocal(ts){return new Date(ts).toLocaleString("zh-TW",{timeZone:"Asia/Taipei",hour12:false});}
-function tzName(){try{return Intl.DateTimeFormat().resolvedOptions().timeZone||"Asia/Taipei";}catch{return"Asia/Taipei";}}
-function deviceId(){const k="dev_id";let id=localStorage.getItem(k);if(!id){id="dev-"+Math.random().toString(36).slice(2,9);localStorage.setItem(k,id);}return id;}
-function loadList(k){try{return JSON.parse(localStorage.getItem(k))||[];}catch{return[];}}
-function saveList(k,v){localStorage.setItem(k,JSON.stringify(v));}
-function addRecord(r){let list=loadList(STORAGE_KEY);list.unshift(r);saveList(STORAGE_KEY,list);render();}
-function queuePush(r){let q=loadList(QUEUE_KEY);q.push(r);saveList(QUEUE_KEY,q);}
-function render(){let list=loadList(STORAGE_KEY);$("#log").textContent=list.map(r=>`${r.staff_name} - ${r.action} - ${r.ts_local}${r.uploaded?" ✓":""}`).join("\n");}
-function toCSV(rows){const h=["id","staff_id","staff_name","action","ts_iso","ts_local","tz","site","device","uploaded"];let csv=h.join(",")+"\n";rows.forEach(r=>{csv+=h.map(x=>r[x]||"").join(",")+"\n"});return csv;}
-function exportCsv(){const list=loadList(STORAGE_KEY);const csv=toCSV(list.slice().reverse());const blob=new Blob([csv],{type:"text/csv"});const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download="attendance.csv";a.click();URL.revokeObjectURL(url);}
-function setNet(){const el=$("#net");if(navigator.onLine){el.textContent="在線";el.className="status online";}else{el.textContent="離線";el.className="status offline";}}
+/* ===== 小工具 ===== */
+const $ = (s) => document.querySelector(s);
 
-async function syncQueue(){
-  setNet(); if(!navigator.onLine) return;
-  const cfg=JSON.parse(localStorage.getItem(CONFIG_KEY)||"{}");
-  if(!cfg.webhook) return;
-  let q=loadList(QUEUE_KEY);
-  for(let i=0;i<q.length;i++){
-    let r=q[i];
-    try{
-      const res=await fetch(cfg.webhook,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(r)});
-      if(res.ok){
-        r.uploaded=true; r.uploaded_at=nowISO();
-        let list=loadList(STORAGE_KEY);
-        const idx=list.findIndex(x=>x.id===r.id);
-        if(idx>=0){ list[idx]=r; saveList(STORAGE_KEY,list); }
-        q=q.filter(x=>x.id!==r.id); saveList(QUEUE_KEY,q);
+function qs(name) {
+  const p = new URLSearchParams(location.search);
+  return p.get(name);
+}
+function nowISO() { return new Date().toISOString(); }
+function fmtLocal(ts) {
+  return new Date(ts).toLocaleString("zh-TW", { timeZone: "Asia/Taipei", hour12: false });
+}
+function tzName() {
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Taipei"; }
+  catch { return "Asia/Taipei"; }
+}
+function deviceId() {
+  const k = "dev_id_v5";
+  let id = localStorage.getItem(k);
+  if (!id) { id = "dev-" + Math.random().toString(36).slice(2,9); localStorage.setItem(k, id); }
+  return id;
+}
+function loadList(k) { try { return JSON.parse(localStorage.getItem(k)) || []; } catch { return []; } }
+function saveList(k, v) { localStorage.setItem(k, JSON.stringify(v)); }
+
+function setNet() {
+  const el = $("#net");
+  if (navigator.onLine) { el.textContent = "在線"; el.className = "status online"; }
+  else { el.textContent = "離線"; el.className = "status offline"; }
+}
+
+/* ===== 顯示紀錄 ===== */
+function render() {
+  const list = loadList(STORAGE_KEY);
+  $("#log").textContent = list.map(r =>
+    `${r.staff_name} - ${r.action} - ${r.ts_local}${r.uploaded ? " ✓" : ""}`
+  ).join("\n");
+}
+
+/* ===== 匯出 CSV ===== */
+function toCSV(rows) {
+  const headers = ["id","staff_id","staff_name","action","ts_iso","ts_local","tz","site","device","uploaded","uploaded_at"];
+  const esc = (v) => {
+    if (v === undefined || v === null) return "";
+    const s = String(v);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g,'""')}"` : s;
+  };
+  const lines = [headers.join(",")];
+  rows.forEach(r => lines.push(headers.map(h => esc(r[h])).join(",")));
+  return lines.join("\n");
+}
+function exportCsv() {
+  const list = loadList(STORAGE_KEY).slice().reverse();
+  const csv = toCSV(list);
+  const blob = new Blob([csv], {type:"text/csv;charset=utf-8;"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = "attendance.csv"; a.click();
+  URL.revokeObjectURL(url);
+}
+
+/* ===== 同步到 Webhook ===== */
+async function syncQueue() {
+  setNet();
+  if (!navigator.onLine) return;
+  const cfg = JSON.parse(localStorage.getItem(CONFIG_KEY) || "{}");
+  if (!cfg.webhook) return;
+
+  let q = loadList(QUEUE_KEY);
+  for (let i = 0; i < q.length; i++) {
+    const rec = q[i];
+    try {
+      const res = await fetch(cfg.webhook, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(rec),
+      });
+      if (res.ok) {
+        rec.uploaded = true;
+        rec.uploaded_at = nowISO();
+        // 更新本機列表
+        const list = loadList(STORAGE_KEY);
+        const idx = list.findIndex(x => x.id === rec.id);
+        if (idx >= 0) { list[idx] = rec; saveList(STORAGE_KEY, list); }
+        // 佇列移除
+        q = q.filter(x => x.id !== rec.id);
+        saveList(QUEUE_KEY, q);
         render();
-      } else { /* keep */ }
-    }catch(_){ break; }
+      }
+    } catch (_) {
+      // 連線/伺服器問題 → 下次再試
+      break;
+    }
   }
 }
 
-function mark(action){
-  if ($(".act[disabled]")) { alert("請先用 QR 開啟本頁（帶有 staff 參數）再簽到。"); return; }
-  const sid=$("#staff").value;
-  const sname=STAFF.find(s=>s.id===sid)?.name||sid;
-  const site=$("#site").value.trim();
-  const ts=nowISO();
-  let rec={id:sid+"|"+action+"|"+ts,staff_id:sid,staff_name:sname,action,ts_iso:ts,ts_local:fmtLocal(ts),tz:tzName(),site,device:deviceId(),uploaded:false};
-  addRecord(rec); queuePush(rec); syncQueue(); if(navigator.vibrate) navigator.vibrate(20);
+/* ===== 打卡 ===== */
+function mark(action) {
+  const staffId = $("#staff").value;
+  const staffName = STAFF.find(s => s.id === staffId)?.name || staffId;
+  const site = $("#site").value.trim();
+  const tsIso = nowISO();
+
+  const rec = {
+    id: `${staffId}|${action}|${tsIso}`,
+    staff_id: staffId,
+    staff_name: staffName,
+    action,
+    ts_iso: tsIso,
+    ts_local: fmtLocal(tsIso),
+    tz: tzName(),
+    site,
+    device: deviceId(),
+    uploaded: false,
+    uploaded_at: ""
+  };
+
+  // 本機列表＋上傳佇列
+  const list = loadList(STORAGE_KEY); list.unshift(rec); saveList(STORAGE_KEY, list);
+  const queue = loadList(QUEUE_KEY); queue.push(rec); saveList(QUEUE_KEY, queue);
+
+  render(); syncQueue();
+  if (navigator.vibrate) navigator.vibrate(20);
 }
 
-function parseStaffFromURL(){
-  const url = new URL(location.href);
-  // 1) 查 query (?staff= 或 ?s=)
-  let sid = url.searchParams.get("staff") || url.searchParams.get("s");
-  // 2) 查 hash (#staff=C004 或 #C004)
-  if (!sid && location.hash){
-    const h = location.hash.replace(/^#/, "");
-    if (h.startsWith("staff=")) sid = h.split("=")[1];
-    else if (/^C00[45]$/i.test(h)) sid = h.toUpperCase();
-  }
-  return sid;
-}
-
-function unlockIfStaff(){
-  const sid = parseStaffFromURL();
-  $("#dbg").textContent = "URL: " + location.href + "\n解析到 staff: " + (sid || "(無)");
-  if (sid && ["C004","C005"].includes(sid)){
-    $("#staff").value=sid;
-    $("#staff").disabled=false; $("#site").disabled=false;
-    $$(".act").forEach(b=>b.disabled=false);
-    $("#scanBanner").style.display="none";
-    $("#okBanner").style.display="";
-    $("#who").textContent = (sid==="C004"?"陳雀惠":"陳清淇");
-    return true;
-  } else {
-    $("#scanBanner").style.display="";
-    $("#okBanner").style.display="none";
-    return false;
-  }
-}
-
-function init(){
+/* ===== 初始化 ===== */
+(function init() {
   setNet();
   window.addEventListener("online", setNet);
   window.addEventListener("offline", setNet);
 
-  // cfg
-  const cfg=JSON.parse(localStorage.getItem(CONFIG_KEY)||"{}");
-  if(cfg.webhook) $("#webhook").value=cfg.webhook;
-  $("#webhook").addEventListener("change",e=>{
-    const c=JSON.parse(localStorage.getItem(CONFIG_KEY)||"{}");
-    c.webhook=e.target.value.trim(); localStorage.setItem(CONFIG_KEY,JSON.stringify(c));
+  // 載入 Webhook 設定
+  const cfg = JSON.parse(localStorage.getItem(CONFIG_KEY) || "{}");
+  if (cfg.webhook) $("#webhook").value = cfg.webhook;
+  $("#webhook").addEventListener("change", (e) => {
+    const c = JSON.parse(localStorage.getItem(CONFIG_KEY) || "{}");
+    c.webhook = e.target.value.trim();
+    localStorage.setItem(CONFIG_KEY, JSON.stringify(c));
   });
 
-  // 事件
-  $$(".act").forEach(btn=>btn.addEventListener("click", ()=>mark(btn.dataset.act)));
-  $("#exportCsv").addEventListener("click", exportCsv);
-  $("#syncNow").addEventListener("click", syncQueue);
-
-  const unlocked = unlockIfStaff();
-  // 若 hash 改變（某些 App 掃描只給 hash），也重新判斷
-  window.addEventListener("hashchange", unlockIfStaff);
-
-  // 如同時帶 act 參數（query/hash 皆可），自動執行
-  const url = new URL(location.href);
-  const actQ = url.searchParams.get("act");
-  const actH = (location.hash.match(/act=(AM_IN|AM_OUT|PM_IN|PM_OUT|OT_IN|OT_OUT)/)||[])[1];
-  const act = actQ || actH;
-  if (unlocked && act) mark(act);
+  // 支援網址參數：?staff=、可選 ?act=
+  const sid = qs("staff");
+  const act = qs("act");
+  if (sid) { $("#staff").value = sid; }
+  if (sid && act) { mark(act); }
 
   render();
-}
-init();
+})();
 </script>
 </body>
 </html>
