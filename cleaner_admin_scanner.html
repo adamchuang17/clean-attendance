@@ -1,0 +1,79 @@
+
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>管理員掃描器</title>
+  <style>
+    body { font-family: "Noto Sans TC", Arial, sans-serif; margin:0; background:#0b0f19; color:#fff; }
+    header { padding:12px 16px; font-weight:700; }
+    #wrap { padding: 12px 16px 24px; }
+    #video { width: 100%; border-radius: 12px; background:#000; }
+    #tip { font-size: 12px; opacity:.8; margin: 10px 2px; }
+    .bar { display:flex; gap:8px; }
+    button { flex:1; background:#1e293b; color:#fff; border:1px solid #334155; padding:10px; border-radius:10px; }
+  </style>
+</head>
+<body>
+  <header>管理員掃描器</header>
+  <div id="wrap">
+    <video id="video" playsinline></video>
+    <div id="tip">把 QR 對準畫面。成功辨識後會自動開啟打卡頁。</div>
+    <div class="bar">
+      <button id="torch">手電筒</button>
+      <button id="close">停止</button>
+    </div>
+  </div>
+<script>
+let stream=null, detector=null, raf=null;
+async function start(){
+  if (!('BarcodeDetector' in window)) {
+    alert("此瀏覽器不支援內建掃描。建議：用手機相機 App 掃描 QR，或改用 Chrome/Edge。");
+    return;
+  }
+  detector=new BarcodeDetector({formats:['qr_code','aztec','data_matrix']});
+  stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } } });
+  const v=document.getElementById('video'); v.srcObject=stream; v.play();
+  const loop=async()=>{
+    try{
+      const codes=await detector.detect(v);
+      if (codes && codes.length){
+        const txt=codes[0].rawValue;
+        stop();
+        // 若掃到的是人員 QR（含 staff 參數），就直接前往；否則直接前往該網址
+        try{
+          const u=new URL(txt);
+          const staff=u.searchParams.get('staff');
+          if (staff){ location.href = txt; return; }
+        }catch(_){}
+        if(/^https?:\/\//i.test(txt)){ location.href=txt; return; }
+        alert("已掃描到內容：\n"+txt+"\n非網址，請改掃人員 QR。");
+        return;
+      }
+    }catch(_){}
+    raf=requestAnimationFrame(loop);
+  };
+  raf=requestAnimationFrame(loop);
+}
+function stop(){
+  if (raf) cancelAnimationFrame(raf);
+  if (stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; }
+  detector=null;
+}
+document.getElementById('close').onclick=stop;
+document.getElementById('torch').onclick=async()=>{
+  try{
+    if (!stream) return;
+    const t=stream.getVideoTracks()[0];
+    const caps=t.getCapabilities?.();
+    if (caps && caps.torch){
+      const s=t.getSettings(); const nv=!s.torch;
+      await t.applyConstraints({advanced:[{torch:nv}]});
+    } else alert("裝置不支援手電筒控制");
+  }catch{ alert("無法切換手電筒"); }
+};
+start();
+</script>
+</body>
+</html>
